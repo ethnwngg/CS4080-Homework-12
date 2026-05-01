@@ -84,6 +84,61 @@ static void runtimeError(const char* format, ...) {
 //< Calls and Functions runtime-error-stack
   resetStack();
 }
+
+
+  static Value clockNative(int argCount, Value* args) {
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+  }
+
+  static bool sqrtNative(int argCount, Value* args, Value* result) {
+    if (argCount != 1) {
+      runtimeError("sqrt() expects 1 argument.");
+      return false;
+    }
+
+    if (!IS_NUMBER(args[0])) {
+      runtimeError("sqrt() argument must be a number.");
+      return false;
+    }
+
+    double x = AS_NUMBER(args[0]);
+    if(x < 0) {
+      runtimeError("sqrt() argument must be non-negative.");
+      return false;
+    }
+
+    *result = NUMBER_VAL(sqrt(x));
+    return true;
+
+  }
+
+  // typeNative() method
+  // Chapter 24 - Challenge Question #4
+  static bool typeNative(int argCount, Value* args, Value* result) {
+    if (argCount != 1) {
+      runtimeError("type() expects 1 argument."); 
+      return false;
+    }
+
+    Value value = args[0];
+
+    if (IS_NUMBER(value)) {
+      *result = OBJ_VAL(copyString("number", 6));
+    } else if (IS_BOOL(value)) {
+      *result = OBJ_VAL(copyString("bool", 4));
+    } else if (IS_NIL(value)) {
+      *result = OBJ_VAL(copyString("nil", 3));
+    } else if (IS_STRING(value)) {
+      *result = OBJ_VAL(copyString("string", 6));
+    } else if (IS_FUNCTION(value)) {
+      *result = OBJ_VAL(copyString("function", 8));
+    } else if (IS_NATIVE(value)) {
+      *result = OBJ_VAL(copyString("native", 6));
+    } else {
+      *result = OBJ_VAL(copyString("unknown", 6));
+    }
+  }
+    
 //< Types of Values runtime-error
 //> Calls and Functions define-native
 static void defineNative(const char* name, NativeFn function) {
@@ -132,6 +187,8 @@ void initVM() {
 //> Calls and Functions define-native-clock
 
   defineNative("clock", clockNative);
+  defineNative("sqrt", sqrtNative);
+  defineNative("type", typeNative);
 //< Calls and Functions define-native-clock
 }
 
@@ -270,7 +327,10 @@ static bool callValue(Value callee, int argCount) {
 //> call-native
       case OBJ_NATIVE: {
         NativeFn native = AS_NATIVE(callee);
-        Value result = native(argCount, vm.stackTop - argCount);
+        Value result;
+        if (!native(argCount, vm.stackTop - argCount, &result)){
+          return false;
+        }
         vm.stackTop -= argCount + 1;
         push(result);
         return true;
@@ -407,18 +467,15 @@ static void concatenate() {
 static InterpretResult run() {
 //> Calls and Functions run
   CallFrame* frame = &vm.frames[vm.frameCount - 1];
+  register uint8_t* ip = frame->ip;
 
 /* A Virtual Machine run < Calls and Functions run
 #define READ_BYTE() (*vm.ip++)
 */
-#define READ_BYTE() (*frame->ip++)
-#define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
-
-
-/* Jumping Back and Forth read-short < Calls and Functions run
+#define READ_BYTE() (*ip++)
 #define READ_SHORT() \
     (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
-*/
+
 #define READ_SHORT() \
     (frame->ip += 2, \
     (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
